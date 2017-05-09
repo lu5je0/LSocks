@@ -1,13 +1,12 @@
 package com.lwwww.io;
 
+import com.lwwww.Constant;
 import com.lwwww.proxy.SocksProxy;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.IOException;
-import java.net.Proxy;
 import java.net.Socket;
-import java.util.Date;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.logging.Logger;
@@ -15,7 +14,7 @@ import java.util.logging.Logger;
 /**
  * Created by 73995 on 2017/5/9.
  */
-public class PipeSocket {
+public class PipeSocket implements Runnable {
 	private Logger logger = Logger.getLogger(PipeSocket.class.getName());
 
 	private Executor executor;
@@ -34,11 +33,16 @@ public class PipeSocket {
 		proxy = new SocksProxy();
 	}
 
+	@Override
+	public void run() {
+		executor.execute(getLocalWorker());
+	}
+
 	private Runnable getLocalWorker() {
 		return () -> {
 			BufferedInputStream localIn;
 			BufferedOutputStream localOut;
-			byte[] buffer = new byte[8192];
+			byte[] buffer = new byte[Constant.BUFFER_LENGTH];
 			byte[] tmp;
 			int readCount;
 
@@ -56,16 +60,19 @@ public class PipeSocket {
 					if (readCount == -1) {
 						throw new IOException("Local socket closed (Read)!");
 					}
-					if (proxy.isReady()) {
-						sendRemote(buffer, readCount);
-					} else {
+					//init proxy
+					if (!proxy.isReady()) {
 						tmp = new byte[readCount];
 						System.arraycopy(buffer, 0, tmp, 0, readCount);
 						localOut.write(proxy.makeResponse(tmp));
 						localOut.flush();
+						logger.info("Connected to " + proxy.getHost() + ":" + proxy.getPort());
+					} else {
+						sendRemote(buffer, readCount);
 					}
 				} catch (IOException e) {
 					e.printStackTrace();
+					break;
 				}
 			}
 		};
