@@ -1,5 +1,7 @@
 package com.lwwww.proxy;
 
+import java.util.Arrays;
+
 /**
  * Created by 73995 on 2017/5/6.
  */
@@ -48,17 +50,17 @@ public class SocksProxy {
 
 	private void getHostAndPort(byte[] bytes) {
 		byte type = bytes[3];
-		byte[] host = null;
-		byte[] port = null;
+		byte[] hostBytes = null;
+		byte[] portBytes = null;
 		switch (type) {
 			case IPv4:
 				System.out.println("ipv4");
 				break;
 			case DOMAIN_NAME:
-				host = new byte[bytes.length - 7];
-				System.arraycopy(bytes, 5, host, 0, host.length);
-				port = new byte[2];
-				System.arraycopy(bytes, bytes.length - 2, port, 0, port.length);
+				hostBytes = new byte[bytes.length - 7];
+				System.arraycopy(bytes, 5, hostBytes, 0, hostBytes.length);
+				portBytes = new byte[2];
+				System.arraycopy(bytes, bytes.length - 2, portBytes, 0, portBytes.length);
 				break;
 			case IPv6:
 				System.out.println("ipv6");
@@ -66,13 +68,13 @@ public class SocksProxy {
 			default:
 				System.out.println(type + "unknown");
 		}
-		if (host != null) {
-			this.host = new String(host);
+		if (hostBytes != null) {
+			host = new String(hostBytes);
 		}
-		if (port != null) {
-			this.port = (port[0] & 0xFF) * 256 + (port[1] & 0xFF);
+		if (portBytes != null) {
+			this.port = (portBytes[0] & 0xFF) * 256 + (portBytes[1] & 0xFF);
 		}
-//		System.out.println(this.host + " " + this.port);
+		System.out.println("Connected to " + host + ":" + port);
 	}
 
 	public String getHost() {

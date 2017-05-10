@@ -1,12 +1,12 @@
 package com.lwwww.server;
 
 import com.lwwww.Constant;
-import com.lwwww.proxy.SocksProxy;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.net.Socket;
+import java.util.Random;
 import java.util.concurrent.Executor;
 
 /**
@@ -17,31 +17,86 @@ public class ServerHandler implements Runnable {
 	//host
 	private Socket remote;
 	private Executor executor;
-	private SocksProxy proxy;
+	private Stage stage;
+	private String host;
+	private int port;
+	private boolean isClosed;
+	private BufferedInputStream clientIn;
+	private BufferedOutputStream clientOut;
+	private BufferedOutputStream remoteOut;
+	private BufferedInputStream remoteIn;
+	private int ID;
 
-	public ServerHandler(Socket client, Executor executor) {
+	private enum Stage {HELLO, READY}
+
+	public ServerHandler(Socket client, Executor executor) throws IOException {
 		this.client = client;
+		this.executor = executor;
+	}
+
+	public void init() {
+		stage = Stage.HELLO;
+		isClosed = false;
+		ID = Math.abs(new Random().nextInt(10000));
+		try {
+			clientIn = new BufferedInputStream(client.getInputStream());
+			clientOut = new BufferedOutputStream(client.getOutputStream());
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
 	}
 
 	@Override
 	public void run() {
 		executor.execute(getClientWorker());
-		executor.execute(getRemoteWorker());
+	}
+
+	private Socket getRemoteSocket(byte[] data) {
+		String hostInfo = new String(data);
+		int tag = hostInfo.indexOf(':');
+		port = Integer.parseInt(hostInfo.substring(tag + 1, hostInfo.length()));
+		host = hostInfo.substring(0, tag);
+		stage = Stage.READY;
+		try {
+			remote = new Socket(host, port);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		try {
+			clientOut.write(1);
+			clientOut.flush();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		return remote;
 	}
 
 	private Runnable getClientWorker() {
 		return () -> {
 			int readCount;
 			byte[] buffer = new byte[Constant.BUFFER_LENGTH];
-			BufferedInputStream in;
-			BufferedOutputStream remoteOut;
+
 			byte[] tmp;
-			try {
-				in = new BufferedInputStream(client.getInputStream());
-			} catch (IOException e) {
-				e.printStackTrace();
-				return;
+
+			//初始化remote连接
+			if (stage != Stage.READY) {
+				try {
+					readCount = clientIn.read(buffer);
+					if (readCount == -1) {
+						throw new IOException("Client socket closed! (read)");
+					}
+					tmp = new byte[readCount];
+					System.arraycopy(buffer, 0, tmp, 0, readCount);
+					remote = getRemoteSocket(tmp);
+					clientOut.write('u');
+					clientOut.flush();
+					executor.execute(getRemoteWorker());
+					stage = Stage.READY;
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
 			}
+
 			//到 host 的连接
 			try {
 				remoteOut = new BufferedOutputStream(remote.getOutputStream());
@@ -49,11 +104,12 @@ public class ServerHandler implements Runnable {
 				e.printStackTrace();
 				return;
 			}
+
 			while (true) {
 				try {
-					readCount = in.read(buffer);
+					readCount = clientIn.read(buffer);
 					if (readCount == -1) {
-						throw new IOException("Client can't read");
+						throw new IOException("Client socket closed! (read)");
 					}
 
 					tmp = new byte[readCount];
@@ -61,18 +117,18 @@ public class ServerHandler implements Runnable {
 					remoteOut.write(tmp);
 					remoteOut.flush();
 				} catch (IOException e) {
-					e.printStackTrace();
+//					e.printStackTrace();
 					break;
 				}
 			}
+
+			close();
 		};
 	}
 
 	private Runnable getRemoteWorker() {
 		return () -> {
 			byte[] buffer = new byte[Constant.BUFFER_LENGTH];
-			BufferedOutputStream clientOut;
-			BufferedInputStream remoteIn;
 			byte[] tmp;
 			int readCount;
 
@@ -95,15 +151,40 @@ public class ServerHandler implements Runnable {
 					if (readCount == -1) {
 						throw new IOException("Remote socket closed! (read)");
 					}
-
 					tmp = new byte[readCount];
 					System.arraycopy(buffer, 0, tmp, 0, readCount);
 					clientOut.write(tmp);
 					clientOut.flush();
 				} catch (IOException e) {
-					e.printStackTrace();
+//					e.printStackTrace();
+					break;
 				}
 			}
+			close();
 		};
+	}
+
+	private void close() {
+		if (isClosed) {
+			return;
+		}
+		isClosed = true;
+
+		try {
+			remote.shutdownOutput();
+			remote.shutdownInput();
+			remote.close();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+
+		try {
+			client.shutdownInput();
+			client.shutdownOutput();
+			client.close();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		System.out.println(host + ":" + port + " close");
 	}
 }

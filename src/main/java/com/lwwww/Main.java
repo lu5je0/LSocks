@@ -18,6 +18,7 @@ public class Main {
 		while (true) {
 			Socket socket = serverSocket.accept();
 			PipeSocket pipeSocket = new PipeSocket(executor, socket);
+			pipeSocket.init();
 			executor.execute(pipeSocket);
 		}
 	}
