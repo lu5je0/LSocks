@@ -26,7 +26,6 @@ public class ServerMain {
 			try {
 				Socket client = serverSocket.accept();
 				ServerHandler serverHandler = new ServerHandler(client, executor);
-				serverHandler.init();
 				executor.execute(serverHandler);
 				System.out.println("New client");
 			} catch (IOException e) {

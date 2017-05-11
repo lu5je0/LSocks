@@ -32,6 +32,7 @@ public class ServerHandler implements Runnable {
 	public ServerHandler(Socket client, Executor executor) throws IOException {
 		this.client = client;
 		this.executor = executor;
+		init();
 	}
 
 	public void init() {
@@ -63,7 +64,7 @@ public class ServerHandler implements Runnable {
 			e.printStackTrace();
 		}
 		try {
-			clientOut.write(1);
+			clientOut.write('u');
 			clientOut.flush();
 		} catch (IOException e) {
 			e.printStackTrace();
@@ -75,11 +76,10 @@ public class ServerHandler implements Runnable {
 		return () -> {
 			int readCount;
 			byte[] buffer = new byte[Constant.BUFFER_LENGTH];
-
 			byte[] tmp;
 
 			//初始化remote连接
-			if (stage != Stage.READY) {
+			if (stage == Stage.HELLO) {
 				try {
 					readCount = clientIn.read(buffer);
 					if (readCount == -1) {
@@ -88,13 +88,12 @@ public class ServerHandler implements Runnable {
 					tmp = new byte[readCount];
 					System.arraycopy(buffer, 0, tmp, 0, readCount);
 					remote = getRemoteSocket(tmp);
-					clientOut.write('u');
-					clientOut.flush();
 					executor.execute(getRemoteWorker());
-					stage = Stage.READY;
 				} catch (IOException e) {
 					e.printStackTrace();
+					return;
 				}
+				stage = Stage.READY;
 			}
 
 			//到 host 的连接

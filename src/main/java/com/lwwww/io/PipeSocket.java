@@ -19,15 +19,15 @@ public class PipeSocket implements Runnable {
 	private Executor executor;
 	private Socket local;
 	private Socket remote;
-	private BufferedOutputStream remoteOutStream;
-	private BufferedInputStream remoteInStream;
+	private BufferedOutputStream serverOutStream;
+	private BufferedInputStream serverInStream;
 	private BufferedInputStream localIn;
 	private BufferedOutputStream localOut;
 	private SocksProxy proxy;
 	private boolean isClosed;
 	private boolean isRemoteGetHostInfo = false;
 
-	public void init() {
+	private void init() {
 		proxy = new SocksProxy();
 		isClosed = false;
 
@@ -39,8 +39,8 @@ public class PipeSocket implements Runnable {
 		}
 
 		try {
-			remoteOutStream = new BufferedOutputStream(remote.getOutputStream());
-			remoteInStream = new BufferedInputStream(remote.getInputStream());
+			serverOutStream = new BufferedOutputStream(remote.getOutputStream());
+			serverInStream = new BufferedInputStream(remote.getInputStream());
 		} catch (IOException e) {
 			e.printStackTrace();
 			return;
@@ -58,14 +58,12 @@ public class PipeSocket implements Runnable {
 	public PipeSocket(Executor executor, Socket local) {
 		this.executor = executor;
 		this.local = local;
+		init();
 	}
 
 	@Override
 	public void run() {
 		executor.execute(getLocalWorker());
-//		if (isRemoteGetHostInfo) {
-//			executor.execute(getRemoteWorker());
-//		}
 	}
 
 	private Runnable getLocalWorker() {
@@ -88,9 +86,11 @@ public class PipeSocket implements Runnable {
 						localOut.flush();
 					} else {
 						if (!isRemoteGetHostInfo) {
-							remoteOutStream.write((proxy.getHost() + ":" + proxy.getPort()).getBytes());
-							remoteOutStream.flush();
-							remoteInStream.read();
+							serverOutStream.write((proxy.getHost() + ":" + proxy.getPort()).getBytes());
+							serverOutStream.flush();
+							if (serverInStream.read() != 'u') {
+								logger.info("Can't send host info to server");
+							}
 							executor.execute(getRemoteWorker());
 							isRemoteGetHostInfo = true;
 						}
@@ -120,23 +120,17 @@ public class PipeSocket implements Runnable {
 
 			while (true) {
 				try {
-					readCount = remoteInStream.read(buffer);
+					readCount = serverInStream.read(buffer);
 
 					if (readCount == -1) {
 						throw new IOException("Remote socket closed (Read)!");
 					}
-					//todo
-					if (buffer[0] == 'u') {
-						continue;
-					}
+
 					localOut.write(buffer, 0, readCount);
 					localOut.flush();
-//					byte[] tmp = new byte[readCount];
-//					System.arraycopy(buffer, 0, tmp, 0, readCount);
-//					System.out.println("****");
-//					System.out.println(new String(tmp));
 				} catch (IOException e) {
-					e.printStackTrace();
+//					e.printStackTrace();
+					System.out.println("Remote socket closed (Read)!");
 					break;
 				}
 			}
@@ -145,8 +139,8 @@ public class PipeSocket implements Runnable {
 	}
 
 	private void sendRemote(byte[] data, int length) throws IOException {
-		remoteOutStream.write(data, 0, length);
-		remoteOutStream.flush();
+		serverOutStream.write(data, 0, length);
+		serverOutStream.flush();
 	}
 
 	private void close() {
