@@ -1,6 +1,6 @@
 package com.lwwww.io;
 
-import com.lwwww.Constant;
+import com.lwwww.misc.Constant;
 import com.lwwww.proxy.SocksProxy;
 
 import java.io.BufferedInputStream;

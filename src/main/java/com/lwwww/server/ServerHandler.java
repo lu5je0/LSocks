@@ -1,10 +1,11 @@
 package com.lwwww.server;
 
-import com.lwwww.Constant;
+import com.lwwww.misc.Constant;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.Socket;
 import java.util.Random;
 import java.util.concurrent.Executor;
@@ -52,9 +53,14 @@ public class ServerHandler implements Runnable {
 		executor.execute(getClientWorker());
 	}
 
+	private Socket getRemoteSocket(InputStream in) {
+		//todo
+		return null;
+	}
+
 	private Socket getRemoteSocket(byte[] data) {
 		String hostInfo = new String(data);
-		int tag = hostInfo.indexOf(':');
+		int tag = hostInfo.lastIndexOf(':');
 		port = Integer.parseInt(hostInfo.substring(tag + 1, hostInfo.length()));
 		host = hostInfo.substring(0, tag);
 		stage = Stage.READY;
@@ -184,6 +190,6 @@ public class ServerHandler implements Runnable {
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
-		System.out.println(host + ":" + port + " close");
+		System.out.println(host + ":" + port + " closed");
 	}
 }
