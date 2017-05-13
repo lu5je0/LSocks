@@ -13,8 +13,8 @@ import java.util.logging.Logger;
 /**
  * Created by 73995 on 2017/5/9.
  */
-public class PipeSocket implements Runnable {
-	private Logger logger = Logger.getLogger(PipeSocket.class.getName());
+public class LocalHandler implements Runnable {
+	private Logger logger = Logger.getLogger(LocalHandler.class.getName());
 
 	private Executor executor;
 	private Socket local;
@@ -55,7 +55,7 @@ public class PipeSocket implements Runnable {
 		}
 	}
 
-	public PipeSocket(Executor executor, Socket local) {
+	public LocalHandler(Executor executor, Socket local) {
 		this.executor = executor;
 		this.local = local;
 		init();

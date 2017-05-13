@@ -1,6 +1,6 @@
 package com.lwwww;
 
-import com.lwwww.io.PipeSocket;
+import com.lwwww.io.LocalHandler;
 
 import java.io.IOException;
 import java.net.ServerSocket;
@@ -17,8 +17,8 @@ public class Main {
 		ServerSocket serverSocket = new ServerSocket(1082);
 		while (true) {
 			Socket socket = serverSocket.accept();
-			PipeSocket pipeSocket = new PipeSocket(executor, socket);
-			executor.execute(pipeSocket);
+			LocalHandler localHandler = new LocalHandler(executor, socket);
+			executor.execute(localHandler);
 		}
 	}
 }
