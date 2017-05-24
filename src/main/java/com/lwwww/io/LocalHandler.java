@@ -1,20 +1,21 @@
 package com.lwwww.io;
 
+import com.lwwww.crypt.ICrypt;
 import com.lwwww.misc.Constant;
 import com.lwwww.proxy.SocksProxy;
+import org.apache.log4j.Logger;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.net.Socket;
 import java.util.concurrent.Executor;
-import java.util.logging.Logger;
 
 /**
  * Created by 73995 on 2017/5/9.
  */
 public class LocalHandler implements Runnable {
-	private Logger logger = Logger.getLogger(LocalHandler.class.getName());
+	private Logger logger = Logger.getLogger(LocalHandler.class);
 
 	private Executor executor;
 	private Socket local;
@@ -26,11 +27,11 @@ public class LocalHandler implements Runnable {
 	private SocksProxy proxy;
 	private boolean isClosed;
 	private boolean isRemoteGetHostInfo = false;
+	private ICrypt crypt;
 
 	private void init() {
 		proxy = new SocksProxy();
 		isClosed = false;
-
 		try {
 			remote = new Socket("127.0.0.1", 31562);
 		} catch (IOException e) {
@@ -55,9 +56,10 @@ public class LocalHandler implements Runnable {
 		}
 	}
 
-	public LocalHandler(Executor executor, Socket local) {
+	public LocalHandler(Executor executor, Socket local, ICrypt crypt) {
 		this.executor = executor;
 		this.local = local;
+		this.crypt = crypt;
 		init();
 	}
 
@@ -82,22 +84,21 @@ public class LocalHandler implements Runnable {
 					if (!proxy.isReady()) {
 						tmp = new byte[readCount];
 						System.arraycopy(buffer, 0, tmp, 0, readCount);
-						localOut.write(proxy.makeResponse(tmp));
-						localOut.flush();
+						sendLocal(proxy.makeResponse(tmp));
 					} else {
 						if (!isRemoteGetHostInfo) {
-							serverOutStream.write((proxy.getHost() + ":" + proxy.getPort()).getBytes());
-							serverOutStream.flush();
+							sendServer((proxy.getHost() + ":" + proxy.getPort()).getBytes());
 							if (serverInStream.read() != 'u') {
 								logger.info("Can't send host info to server");
 							}
 							executor.execute(getRemoteWorker());
 							isRemoteGetHostInfo = true;
 						}
-						sendRemote(buffer, readCount);
+
+						sendServer(buffer, readCount);
 					}
 				} catch (IOException e) {
-					System.out.println("Local socket closed (Read)!");
+					logger.info("Local socket closed (Read)!");
 					break;
 				}
 			}
@@ -107,16 +108,8 @@ public class LocalHandler implements Runnable {
 
 	private Runnable getRemoteWorker() {
 		return () -> {
-			BufferedOutputStream localOut;
 			byte[] buffer = new byte[Constant.BUFFER_LENGTH];
 			int readCount;
-
-			try {
-				localOut = new BufferedOutputStream(local.getOutputStream());
-			} catch (IOException e) {
-				e.printStackTrace();
-				return;
-			}
 
 			while (true) {
 				try {
@@ -126,11 +119,9 @@ public class LocalHandler implements Runnable {
 						throw new IOException("Remote socket closed (Read)!");
 					}
 
-					localOut.write(buffer, 0, readCount);
-					localOut.flush();
+					sendLocal(buffer, readCount);
 				} catch (IOException e) {
-//					e.printStackTrace();
-					System.out.println("Remote socket closed (Read)!");
+					logger.info("Remote socket closed (Read)!");
 					break;
 				}
 			}
@@ -138,9 +129,25 @@ public class LocalHandler implements Runnable {
 		};
 	}
 
-	private void sendRemote(byte[] data, int length) throws IOException {
-		serverOutStream.write(data, 0, length);
+	private void sendLocal(byte[] data, int length) throws IOException {
+		localOut.write(data, 0, length);
+		localOut.flush();
+	}
+
+	private void sendLocal(byte[] data) throws IOException {
+		sendLocal(data, data.length);
+	}
+
+	private void sendServer(byte[] data, int length) throws IOException {
+		byte[] tmp = new byte[length];
+		System.arraycopy(data, 0, tmp, 0, length);
+		byte[] crypto = crypt.encrypt(tmp);
+		serverOutStream.write(crypto, 0, crypto.length);
 		serverOutStream.flush();
+	}
+
+	private void sendServer(byte[] data) throws IOException {
+		sendServer(data, data.length);
 	}
 
 	private void close() {
@@ -164,6 +171,6 @@ public class LocalHandler implements Runnable {
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
-		System.out.println(proxy.getHost() + proxy.getPort() + " closed");
+		logger.info(proxy.getHost() + proxy.getPort() + " closed");
 	}
 }

@@ -1,6 +1,8 @@
 package com.lwwww.server;
 
+import com.lwwww.crypt.ICrypt;
 import com.lwwww.misc.Constant;
+import org.apache.log4j.Logger;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
@@ -27,16 +29,19 @@ public class ServerHandler implements Runnable {
 	private BufferedOutputStream remoteOut;
 	private BufferedInputStream remoteIn;
 	private int ID;
+	private Logger logger = Logger.getLogger(ServerHandler.class);
+	private ICrypt crypt;
 
 	private enum Stage {HELLO, READY}
 
-	public ServerHandler(Socket client, Executor executor) throws IOException {
+	public ServerHandler(Socket client, Executor executor, ICrypt crypt) throws IOException {
 		this.client = client;
 		this.executor = executor;
+		this.crypt = crypt;
 		init();
 	}
 
-	public void init() {
+	private void init() {
 		stage = Stage.HELLO;
 		isClosed = false;
 		ID = Math.abs(new Random().nextInt(10000));
@@ -53,11 +58,6 @@ public class ServerHandler implements Runnable {
 		executor.execute(getClientWorker());
 	}
 
-	private Socket getRemoteSocket(InputStream in) {
-		//todo
-		return null;
-	}
-
 	private Socket getRemoteSocket(byte[] data) {
 		String hostInfo = new String(data);
 		int tag = hostInfo.lastIndexOf(':');
@@ -67,14 +67,16 @@ public class ServerHandler implements Runnable {
 		try {
 			remote = new Socket(host, port);
 		} catch (IOException e) {
-			e.printStackTrace();
+			logger.info("Can't open remote socket!");
 		}
+		//通知client，已经获取host_info
 		try {
 			clientOut.write('u');
 			clientOut.flush();
 		} catch (IOException e) {
-			e.printStackTrace();
+			logger.error("12");
 		}
+		System.out.println("Connected to " + host + ":" + port);
 		return remote;
 	}
 
@@ -93,7 +95,11 @@ public class ServerHandler implements Runnable {
 					}
 					tmp = new byte[readCount];
 					System.arraycopy(buffer, 0, tmp, 0, readCount);
-					remote = getRemoteSocket(tmp);
+					remote = getRemoteSocket(crypt.decrypt(tmp));
+					if (remote == null) {
+						close();
+						return;
+					}
 					executor.execute(getRemoteWorker());
 				} catch (IOException e) {
 					e.printStackTrace();
@@ -114,15 +120,14 @@ public class ServerHandler implements Runnable {
 				try {
 					readCount = clientIn.read(buffer);
 					if (readCount == -1) {
-						throw new IOException("Client socket closed! (read)");
+						throw new IOException("Client socket closed! (write)");
 					}
 
 					tmp = new byte[readCount];
 					System.arraycopy(buffer, 0, tmp, 0, readCount);
-					remoteOut.write(tmp);
-					remoteOut.flush();
+					sendRemote(tmp);
 				} catch (IOException e) {
-//					e.printStackTrace();
+					logger.info("Client socket closed! (write)");
 					break;
 				}
 			}
@@ -161,12 +166,21 @@ public class ServerHandler implements Runnable {
 					clientOut.write(tmp);
 					clientOut.flush();
 				} catch (IOException e) {
-//					e.printStackTrace();
+					logger.info("Remote socket closed! (read)");
 					break;
 				}
 			}
 			close();
 		};
+	}
+
+	private void sendRemote(byte[] bytes) {
+		try {
+			remoteOut.write(crypt.decrypt(bytes));
+			remoteOut.flush();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
 	}
 
 	private void close() {
@@ -175,21 +189,25 @@ public class ServerHandler implements Runnable {
 		}
 		isClosed = true;
 
-		try {
-			remote.shutdownOutput();
-			remote.shutdownInput();
-			remote.close();
-		} catch (IOException e) {
-			e.printStackTrace();
+		if (remote != null) {
+			try {
+				remote.shutdownOutput();
+				remote.shutdownInput();
+				remote.close();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
 		}
 
-		try {
-			client.shutdownInput();
-			client.shutdownOutput();
-			client.close();
-		} catch (IOException e) {
-			e.printStackTrace();
+		if (client != null) {
+			try {
+				client.shutdownInput();
+				client.shutdownOutput();
+				client.close();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+			System.out.println(host + ":" + port + " closed");
 		}
-		System.out.println(host + ":" + port + " closed");
 	}
 }
